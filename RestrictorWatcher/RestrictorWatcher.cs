@@ -19,12 +19,15 @@ namespace RestrictorWatcher
         private const string RESTRICTOR = @"C:\Users\Christoph Korn\Tools\Restrictor\Restrictor.exe";
         private readonly List<DisallowedProcess> lastDisallowedTasks = new List<DisallowedProcess>();
         private readonly Regex disallowRegex = null;
+        private readonly Regex illegalPrefixRegex = null;
 
         public RestrictorWatcher()
         {
             //chrome.exe (PID = 10404) identified C:\Users\Christoph Korn\AppData\Local\Google\Chrome\User Data\SwReporter\34.174.200\software_reporter_tool.exe as Disallowed using default rule, Guid = {11015445-d282-4f86-96a2-9e485f593302}
             disallowRegex = new Regex(@"^(?<name>.*) \(PID = (?<pid>\d+)\) identified (?<path>.*) as Disallowed",
                 RegexOptions.Compiled);
+            //\\?\C:\Users\Christoph Korn\AppData\Roaming\discord\0.0.301\modules\discord_hook\14\DiscordHookHelper.exe
+            illegalPrefixRegex = new Regex(@"^\\\\\?\\", RegexOptions.Compiled);
         }
 
         private static Task<string> Hash(string input)
@@ -116,7 +119,7 @@ namespace RestrictorWatcher
                                 tls.Add(new DisallowedProcess(
                                     Int32.Parse(m.Groups["pid"].Value),
                                     m.Groups["name"].Value,
-                                    m.Groups["path"].Value,
+                                    illegalPrefixRegex.Replace(m.Groups["path"].Value, string.Empty),
                                     x + 1));
                             }
                             return tls;
