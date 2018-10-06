@@ -29,12 +29,22 @@ namespace RestrictorWatcher
 
         private async void timerRefreshList_Tick(object sender, EventArgs e)
         {
+            await AddNewProcesses();
+        }
+
+        private async Task AddNewProcesses()
+        {
             List<RestrictorWatcher.DisallowedProcess> list = await rw.Run();
 
             foreach (RestrictorWatcher.DisallowedProcess item in list)
             {
                 lbDisallowedProcesses.Items.Add(item);
             }
+        }
+
+        private async void MainForm_Load(object sender, EventArgs e)
+        {
+            await AddNewProcesses();
         }
     }
 }
