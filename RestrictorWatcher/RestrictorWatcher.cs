@@ -14,7 +14,7 @@ namespace RestrictorWatcher
 {
     public class RestrictorWatcher
     {
-        private string lastChecksum = "";
+        private int lastLineCount = 0;
         private const string LOGFILE = @"C:\Users\Christoph Korn\AppData\Local\Temp\restrictor.txt";
         private const string RESTRICTOR = @"C:\Users\Christoph Korn\Tools\Restrictor\Restrictor.exe";
         private readonly List<DisallowedProcess> lastDisallowedTasks = new List<DisallowedProcess>();
@@ -30,36 +30,18 @@ namespace RestrictorWatcher
             illegalPrefixRegex = new Regex(@"^\\\\\?\\", RegexOptions.Compiled);
         }
 
-        private static string Hash(string input)
-        {
-            using (SHA1Managed sha1 = new SHA1Managed())
-            {
-                var hash = sha1.ComputeHash(Encoding.UTF8.GetBytes(input));
-                var sb = new StringBuilder(hash.Length * 2);
-
-                foreach (byte b in hash)
-                {
-                    // can be "x2" if you want lowercase
-                    sb.Append(b.ToString("X2"));
-                }
-
-                return sb.ToString();
-            }
-        }
-
         [Benchmark]
         public async Task<List<DisallowedProcess>> Run()
         {
             List<DisallowedProcess> list = new List<DisallowedProcess>();
             string[] currentLines = await Task.Run(() => File.ReadAllLines(LOGFILE));
-            string currentContent = await Task.Run(() => string.Join("", currentLines));
-            string currentChecksum = await Task.Run(() => Hash(currentContent));
-            if (currentChecksum != lastChecksum)
+            int currentLinecount = currentLines.Length;
+            if (currentLinecount != lastLineCount)
             {
                 list = await Task.Run(() => GetDisallowedProcesses(currentLines));
                 list = await Task.Run(() => AddNewDisallowedProcesses(list));
 
-                lastChecksum = currentChecksum;
+                lastLineCount = currentLinecount;
             }
             return list;
         }
