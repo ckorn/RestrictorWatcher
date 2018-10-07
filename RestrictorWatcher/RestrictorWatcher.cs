@@ -30,45 +30,34 @@ namespace RestrictorWatcher
             illegalPrefixRegex = new Regex(@"^\\\\\?\\", RegexOptions.Compiled);
         }
 
-        private static Task<string> Hash(string input)
+        private static string Hash(string input)
         {
-            return Task.Run(() =>
+            using (SHA1Managed sha1 = new SHA1Managed())
             {
-                using (SHA1Managed sha1 = new SHA1Managed())
+                var hash = sha1.ComputeHash(Encoding.UTF8.GetBytes(input));
+                var sb = new StringBuilder(hash.Length * 2);
+
+                foreach (byte b in hash)
                 {
-                    var hash = sha1.ComputeHash(Encoding.UTF8.GetBytes(input));
-                    var sb = new StringBuilder(hash.Length * 2);
-
-                    foreach (byte b in hash)
-                    {
-                        // can be "x2" if you want lowercase
-                        sb.Append(b.ToString("X2"));
-                    }
-
-                    return sb.ToString();
+                    // can be "x2" if you want lowercase
+                    sb.Append(b.ToString("X2"));
                 }
-            });
-        }
 
-        private static Task<string[]> ReadFile(string file)
-        {
-            return Task.Run(() =>
-            {
-                return File.ReadAllLines(file);
-            });
+                return sb.ToString();
+            }
         }
 
         [Benchmark]
         public async Task<List<DisallowedProcess>> Run()
         {
             List<DisallowedProcess> list = new List<DisallowedProcess>();
-            string[] currentLines = await ReadFile(LOGFILE);
+            string[] currentLines = await Task.Run(() => File.ReadAllLines(LOGFILE));
             string currentContent = await Task.Run(() => string.Join("", currentLines));
-            string currentChecksum = await Hash(currentContent);
+            string currentChecksum = await Task.Run(() => Hash(currentContent));
             if (currentChecksum != lastChecksum)
             {
-                list = await GetDisallowedProcesses(currentLines);
-                list = await AddNewDisallowedProcesses(list);
+                list = await Task.Run(() => GetDisallowedProcesses(currentLines));
+                list = await Task.Run(() => AddNewDisallowedProcesses(list));
 
                 lastChecksum = currentChecksum;
             }
@@ -81,55 +70,49 @@ namespace RestrictorWatcher
             Process.Start(RESTRICTOR, args);
         }
 
-        private Task<List<DisallowedProcess>> AddNewDisallowedProcesses(List<DisallowedProcess> newList)
+        private List<DisallowedProcess> AddNewDisallowedProcesses(List<DisallowedProcess> newList)
         {
-            return Task.Run(() =>
+            List<DisallowedProcess> newAdded = new List<DisallowedProcess>();
+
+            foreach (DisallowedProcess process in newList.OrderBy(x => x.Line))
             {
-                List<DisallowedProcess> newAdded = new List<DisallowedProcess>();
-
-                foreach (DisallowedProcess process in newList.OrderBy(x => x.Line))
+                if (!this.lastDisallowedTasks.Any(x => x.Line == process.Line))
                 {
-                    if (!this.lastDisallowedTasks.Any(x => x.Line == process.Line))
-                    {
-                        lastDisallowedTasks.Add(process);
-                        newAdded.Add(process);
-                    }
+                    lastDisallowedTasks.Add(process);
+                    newAdded.Add(process);
                 }
+            }
 
-                return newAdded;
-            });
+            return newAdded;
         }
 
-        private Task<List<DisallowedProcess>> GetDisallowedProcesses(string[] lines)
+        private List<DisallowedProcess> GetDisallowedProcesses(string[] lines)
         {
-            return Task.Run(() =>
+            List<DisallowedProcess> list = new List<DisallowedProcess>();
+
+            var part = Partitioner.Create(0, lines.Length, 100);
+            Parallel.ForEach(part, range =>
             {
-                List<DisallowedProcess> list = new List<DisallowedProcess>();
-
-                var part = Partitioner.Create(0, lines.Length, 100);
-                Parallel.ForEach(part, range =>
-                {
-                    Parallel.For(range.Item1, range.Item2,
-                        () => new List<DisallowedProcess>(),
-                        (x, state, tls) =>
+                Parallel.For(range.Item1, range.Item2,
+                    () => new List<DisallowedProcess>(),
+                    (x, state, tls) =>
+                    {
+                        Match m = disallowRegex.Match(lines[x]);
+                        if ((m != null) && (m.Success))
                         {
-                            Match m = disallowRegex.Match(lines[x]);
-                            if ((m != null) && (m.Success))
-                            {
-                                tls.Add(new DisallowedProcess(
-                                    Int32.Parse(m.Groups["pid"].Value),
-                                    m.Groups["name"].Value,
-                                    illegalPrefixRegex.Replace(m.Groups["path"].Value, string.Empty),
-                                    x + 1));
-                            }
-                            return tls;
-                        },
-                        (x) => { lock (list) { list.AddRange(x); } }
-                     );
-                });
-
-                return list;
+                            tls.Add(new DisallowedProcess(
+                                Int32.Parse(m.Groups["pid"].Value),
+                                m.Groups["name"].Value,
+                                illegalPrefixRegex.Replace(m.Groups["path"].Value, string.Empty),
+                                x + 1));
+                        }
+                        return tls;
+                    },
+                    (x) => { lock (list) { list.AddRange(x); } }
+                 );
             });
+
+            return list;
         }
 
         public class DisallowedProcess
