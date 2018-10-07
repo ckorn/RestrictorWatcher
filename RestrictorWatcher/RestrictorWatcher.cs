@@ -56,6 +56,19 @@ namespace RestrictorWatcher
         {
             List<DisallowedProcess> newAdded = new List<DisallowedProcess>();
 
+            if ((newList.Count > 0) && (lastDisallowedTasks.Count > 0))
+            {
+                // if the log is emptied the max line should differ.
+                // So all lines coming now are considered new lines
+                int currentMax = lastDisallowedTasks.AsParallel().Max(x => x.Line);
+                int newMax = newList.AsParallel().Max(x => x.Line);
+
+                if (newMax < currentMax)
+                {
+                    lastDisallowedTasks.Clear();
+                }
+            }
+
             foreach (DisallowedProcess process in newList.OrderBy(x => x.Line))
             {
                 if (!this.lastDisallowedTasks.Any(x => x.Line == process.Line))
