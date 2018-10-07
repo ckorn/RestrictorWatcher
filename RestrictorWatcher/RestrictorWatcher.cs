@@ -15,12 +15,14 @@ namespace RestrictorWatcher
 {
     public class RestrictorWatcher
     {
-        private int lastLineCount = 0;
         private const string LOGFILE = @"C:\Users\Christoph Korn\AppData\Local\Temp\restrictor.txt";
         private const string RESTRICTOR = @"C:\Users\Christoph Korn\Tools\Restrictor\Restrictor.exe";
         private readonly List<DisallowedProcess> lastDisallowedTasks = new List<DisallowedProcess>();
         private readonly Regex disallowRegex = null;
         private readonly Regex illegalPrefixRegex = null;
+        private readonly FileSystemWatcher logfileWatcher = null;
+        public delegate void NewProcessesEventHandler(object sender, LogFileChangedEventArgs e);
+        public event NewProcessesEventHandler NewProcesses;
 
         public RestrictorWatcher()
         {
@@ -29,21 +31,54 @@ namespace RestrictorWatcher
                 RegexOptions.Compiled);
             //\\?\C:\Users\Christoph Korn\AppData\Roaming\discord\0.0.301\modules\discord_hook\14\DiscordHookHelper.exe
             illegalPrefixRegex = new Regex(@"^\\\\\?\\", RegexOptions.Compiled);
+
+            FileInfo f = new FileInfo(LOGFILE);
+            logfileWatcher = new FileSystemWatcher(f.DirectoryName, f.Name)
+            {
+                EnableRaisingEvents = false
+            };
+            logfileWatcher.Error += LogfileWatcher_Error;
+            logfileWatcher.Changed += LogfileWatcher_Changed;
+        }
+
+        public async void StartWatching()
+        {
+            await ScanLogFile();
+            logfileWatcher.EnableRaisingEvents = true;
+        }
+
+        private async void LogfileWatcher_Changed(object sender, FileSystemEventArgs e)
+        {
+            await ScanLogFile();
+        }
+
+        private async Task ScanLogFile()
+        {
+            List<DisallowedProcess> list = await this.Run();
+            if (list.Count > 0)
+            {
+                OnNewProcesses(list);
+            }
+        }
+
+        private void LogfileWatcher_Error(object sender, ErrorEventArgs e)
+        {
+            throw new Exception("LogfileWatcher error", e.GetException());
+        }
+
+        public void OnNewProcesses(List<DisallowedProcess> newProcesses)
+        {
+            NewProcesses?.Invoke(this, new LogFileChangedEventArgs(newProcesses));
         }
 
         [Benchmark]
-        public async Task<List<DisallowedProcess>> Run()
+        private async Task<List<DisallowedProcess>> Run()
         {
             List<DisallowedProcess> list = new List<DisallowedProcess>();
             string[] currentLines = await Task.Run(() => File.ReadAllLines(LOGFILE));
             int currentLinecount = currentLines.Length;
-            if (currentLinecount != lastLineCount)
-            {
-                list = await Task.Run(() => GetDisallowedProcesses(currentLines));
-                list = await Task.Run(() => AddNewDisallowedProcesses(list));
-
-                lastLineCount = currentLinecount;
-            }
+            list = await Task.Run(() => GetDisallowedProcesses(currentLines));
+            list = await Task.Run(() => AddNewDisallowedProcesses(list));
             return list;
         }
 
@@ -51,26 +86,29 @@ namespace RestrictorWatcher
         {
             List<DisallowedProcess> newAdded = new List<DisallowedProcess>();
 
-            if ((newList.Count > 0) && (lastDisallowedTasks.Count > 0))
+            lock (lastDisallowedTasks)
             {
-                // if the log is emptied the max line should differ.
-                // So all lines coming now are considered new lines
-                int currentMax = lastDisallowedTasks.AsParallel().Max(x => x.Line);
-                int newMax = newList.AsParallel().Max(x => x.Line);
-
-                if (newMax < currentMax)
+                if ((newList.Count > 0) && (lastDisallowedTasks.Count > 0))
                 {
-                    lastDisallowedTasks.Clear();
-                }
-            }
+                    // if the log is emptied the max line should differ.
+                    // So all lines coming now are considered new lines
+                    int currentMax = lastDisallowedTasks.AsParallel().Max(x => x.Line);
+                    int newMax = newList.AsParallel().Max(x => x.Line);
 
-            foreach (DisallowedProcess process in newList.OrderBy(x => x.Line))
-            {
-                if (!this.lastDisallowedTasks.Any(x => x.Line == process.Line))
-                {
-                    lastDisallowedTasks.Add(process);
-                    newAdded.Add(process);
+                    if (newMax < currentMax)
+                    {
+                        lastDisallowedTasks.Clear();
+                    }
                 }
+
+                foreach (DisallowedProcess process in newList.OrderBy(x => x.Line))
+                {
+                    if (!this.lastDisallowedTasks.Any(x => x.Line == process.Line))
+                    {
+                        lastDisallowedTasks.Add(process);
+                        newAdded.Add(process);
+                    }
+                } 
             }
 
             return newAdded;
@@ -147,6 +185,16 @@ namespace RestrictorWatcher
             public override string ToString()
             {
                 return $"pid={Pid} name={Name} path={Path} line={Line}";
+            }
+        }
+
+        public class LogFileChangedEventArgs : EventArgs
+        {
+            public List<DisallowedProcess> NewProcesses { get; private set; }
+
+            public LogFileChangedEventArgs(List<DisallowedProcess> newProcesses)
+            {
+                this.NewProcesses = newProcesses;
             }
         }
     }

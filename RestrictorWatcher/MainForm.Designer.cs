@@ -30,7 +30,6 @@
         {
             this.components = new System.ComponentModel.Container();
             this.lbDisallowedProcesses = new System.Windows.Forms.ListBox();
-            this.timerRefreshList = new System.Windows.Forms.Timer(this.components);
             this.contextMenuStripListBox = new System.Windows.Forms.ContextMenuStrip(this.components);
             this.runRestrictorToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.openFolderToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
@@ -50,12 +49,6 @@
             this.lbDisallowedProcesses.MouseDoubleClick += new System.Windows.Forms.MouseEventHandler(this.listBox1_MouseDoubleClick);
             this.lbDisallowedProcesses.MouseDown += new System.Windows.Forms.MouseEventHandler(this.lbDisallowedProcesses_MouseDown);
             // 
-            // timerRefreshList
-            // 
-            this.timerRefreshList.Enabled = true;
-            this.timerRefreshList.Interval = 5000;
-            this.timerRefreshList.Tick += new System.EventHandler(this.timerRefreshList_Tick);
-            // 
             // contextMenuStripListBox
             // 
             this.contextMenuStripListBox.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
@@ -63,7 +56,7 @@
             this.openFolderToolStripMenuItem,
             this.runProgramToolStripMenuItem});
             this.contextMenuStripListBox.Name = "contextMenuStrip1";
-            this.contextMenuStripListBox.Size = new System.Drawing.Size(181, 92);
+            this.contextMenuStripListBox.Size = new System.Drawing.Size(149, 70);
             // 
             // runRestrictorToolStripMenuItem
             // 
@@ -102,7 +95,6 @@
 
         #endregion
         private System.Windows.Forms.ListBox lbDisallowedProcesses;
-        private System.Windows.Forms.Timer timerRefreshList;
         private System.Windows.Forms.ContextMenuStrip contextMenuStripListBox;
         private System.Windows.Forms.ToolStripMenuItem runRestrictorToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem openFolderToolStripMenuItem;
