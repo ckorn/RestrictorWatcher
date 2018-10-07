@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -44,12 +45,6 @@ namespace RestrictorWatcher
                 lastLineCount = currentLinecount;
             }
             return list;
-        }
-
-        public void RunRestrictor(DisallowedProcess p)
-        {
-            string args = $"/NewHash \"{p.Path}\"";
-            Process.Start(RESTRICTOR, args);
         }
 
         private List<DisallowedProcess> AddNewDisallowedProcesses(List<DisallowedProcess> newList)
@@ -123,6 +118,30 @@ namespace RestrictorWatcher
                 this.Name = name;
                 this.Path = path;
                 this.Line = line;
+            }
+
+            public void RunRestrictor()
+            {
+                string args = $"/NewHash \"{Path}\"";
+                Process.Start(RESTRICTOR, args);
+            }
+
+            public void OpenFolder()
+            {
+                FileInfo f = new FileInfo(Path);
+                Process.Start(f.DirectoryName);
+            }
+
+            public void RunProgram()
+            {
+                try
+                {
+                    Process.Start(Path);
+                }
+                catch (Win32Exception e) when (e.ErrorCode == -2147467259)
+                {
+                    // Programm wurde geblockt
+                }
             }
 
             public override string ToString()
