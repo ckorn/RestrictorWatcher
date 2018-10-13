@@ -118,27 +118,22 @@ namespace RestrictorWatcher
         {
             List<DisallowedProcess> list = new List<DisallowedProcess>();
 
-            var part = Partitioner.Create(0, lines.Length, 100);
-            Parallel.ForEach(part, range =>
-            {
-                Parallel.For(range.Item1, range.Item2,
-                    () => new List<DisallowedProcess>(),
-                    (x, state, tls) =>
+            Parallel.For(0, lines.Length,
+                () => new List<DisallowedProcess>(),
+                (x, state, tls) =>
+                {
+                    Match m = disallowRegex.Match(lines[x]);
+                    if ((m != null) && (m.Success))
                     {
-                        Match m = disallowRegex.Match(lines[x]);
-                        if ((m != null) && (m.Success))
-                        {
-                            tls.Add(new DisallowedProcess(
-                                Int32.Parse(m.Groups["pid"].Value),
-                                m.Groups["name"].Value,
-                                illegalPrefixRegex.Replace(m.Groups["path"].Value, string.Empty),
-                                x + 1));
-                        }
-                        return tls;
-                    },
-                    (x) => { lock (list) { list.AddRange(x); } }
-                 );
-            });
+                        tls.Add(new DisallowedProcess(
+                            Int32.Parse(m.Groups["pid"].Value),
+                            m.Groups["name"].Value,
+                            illegalPrefixRegex.Replace(m.Groups["path"].Value, string.Empty),
+                            x + 1));
+                    }
+                    return tls;
+                },
+                (x) => { lock (list) { list.AddRange(x); } });
 
             return list;
         }
